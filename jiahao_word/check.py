@@ -66,6 +66,7 @@ class Word:
 class Group:
     where: str
     id: str
+    label: str
     has_jargon: bool
     plain: list[Word]
     jargon: list[Word]
@@ -224,11 +225,19 @@ def _load_group(path: Path, problems: list[Problem]) -> Group | None:
                 )
             )
 
+    raw_label = data.get("label")
+    label = raw_label.strip() if isinstance(raw_label, str) else ""
+
     plain, _ = _read_words(data, where, PLAIN, problems)
     jargon, has_jargon = _read_words(data, where, JARGON, problems)
 
     return Group(
-        where=where, id=group_id, has_jargon=has_jargon, plain=plain, jargon=jargon
+        where=where,
+        id=group_id,
+        label=label,
+        has_jargon=has_jargon,
+        plain=plain,
+        jargon=jargon,
     )
 
 
@@ -272,14 +281,14 @@ def _check_one_group(group: Group, problems: list[Problem]) -> None:
             )
 
 
-def check_groups(groups_dir: Path) -> tuple[list[Problem], int]:
-    """返回（所有问题，组文件个数）。有问题也不提前退出。"""
+def scan_groups(groups_dir: Path) -> tuple[list[Group], list[Problem], int]:
+    """返回（读出来的组、所有问题、组文件个数）。有问题也不提前退出。"""
     problems: list[Problem] = []
     files = _group_files(groups_dir)
     if not files:
         if not groups_dir.is_dir():
-            return [Problem(str(groups_dir), "找不到这个目录")], 0
-        return [], 0
+            return [], [Problem(str(groups_dir), "找不到这个目录")], 0
+        return [], [], 0
 
     groups: list[Group] = []
     for path in files:
@@ -317,4 +326,10 @@ def check_groups(groups_dir: Path) -> tuple[list[Problem], int]:
                     )
                 )
 
-    return problems, len(files)
+    return groups, problems, len(files)
+
+
+def check_groups(groups_dir: Path) -> tuple[list[Problem], int]:
+    """返回（所有问题，组文件个数）。"""
+    _, problems, file_count = scan_groups(groups_dir)
+    return problems, file_count
