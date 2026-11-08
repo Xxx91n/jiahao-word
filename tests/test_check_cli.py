@@ -317,6 +317,199 @@ def test_all_problems_are_listed_at_once(tmp_path: Path) -> None:
     assert "重复" in result.stderr
 
 
+def test_non_ascii_issue_number_is_caught_without_crashing(tmp_path: Path) -> None:
+    result = run_check(
+        tmp_path,
+        {
+            "g0001.yaml": """\
+                id: g0001
+                label: 编号写法不对
+                plain:
+                  - lang: zh
+                    word: 说清楚
+                    issue: "²"
+                jargon:
+                  - lang: zh
+                    word: 赋能
+                    issue: 12
+                """
+        },
+    )
+
+    assert result.returncode == 1
+    assert "issue 编号「²」不对" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_duplicate_yaml_key_is_caught(tmp_path: Path) -> None:
+    result = run_check(
+        tmp_path,
+        {
+            "g0001.yaml": """\
+                id: g0001
+                label: 键重复了
+                plain:
+                  - lang: zh
+                    word: 说清楚
+                    issue: 12
+                plain:
+                  - lang: en
+                    word: say it plainly
+                    issue: 12
+                jargon:
+                  - lang: zh
+                    word: 赋能
+                    issue: 12
+                """
+        },
+    )
+
+    assert result.returncode == 1
+    assert "键「plain」重复了" in result.stderr
+
+
+def test_yaml_merge_keys_still_pass(tmp_path: Path) -> None:
+    result = run_check(
+        tmp_path,
+        {
+            "g0001.yaml": """\
+                defaults: &defaults
+                  lang: zh
+                  issue: 12
+                plain:
+                  - <<: *defaults
+                    word: 说清楚
+                jargon:
+                  - <<: *defaults
+                    word: 赋能
+                """
+        },
+    )
+
+    assert result.returncode == 0
+    assert "检查通过" in result.stdout
+
+
+def test_unhashable_yaml_key_does_not_crash(tmp_path: Path) -> None:
+    result = run_check(
+        tmp_path,
+        {
+            "g0001.yaml": """\
+                ? [a, b]
+                : 1
+                """
+        },
+    )
+
+    assert result.returncode == 1
+    assert "不是能读的 YAML" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_broken_explicit_tag_does_not_crash(tmp_path: Path) -> None:
+    result = run_check(
+        tmp_path,
+        {
+            "g0001.yaml": """\
+                id: g0001
+                label: 标签写坏了
+                plain:
+                  - lang: zh
+                    word: 说清楚
+                    issue: !!int "abc"
+                jargon:
+                  - lang: zh
+                    word: 赋能
+                    issue: 12
+                """
+        },
+    )
+
+    assert result.returncode == 1
+    assert "不是能读的 YAML" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_duplicate_keys_inside_merge_source_are_caught(tmp_path: Path) -> None:
+    result = run_check(
+        tmp_path,
+        {
+            "g0001.yaml": """\
+                id: g0001
+                label: 合并来源里重复
+                plain:
+                  - <<: {lang: zh, lang: en}
+                    word: 说清楚
+                jargon:
+                  - lang: zh
+                    word: 赋能
+                    issue: 12
+                """
+        },
+    )
+
+    assert result.returncode == 1
+    assert "键「lang」重复了" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_errors_from_two_files_are_listed_together(tmp_path: Path) -> None:
+    result = run_check(
+        tmp_path,
+        {
+            "g0001.yaml": """\
+                id: g0001
+                label: 只有大白话
+                plain:
+                  - lang: zh
+                    word: 一句大白话
+                    issue: 12
+                jargon: []
+                """,
+            "g0002.yaml": """\
+                id: g0002
+                label: 语言写错了
+                plain:
+                  - lang: fr
+                    word: bonjour
+                    issue: 12
+                jargon:
+                  - lang: zh
+                    word: 赋能
+                    issue: 12
+                """,
+        },
+    )
+
+    assert result.returncode == 1
+    assert "没有黑话" in result.stderr
+    assert "语言标签「fr」不合法" in result.stderr
+
+
+def test_huge_issue_number_does_not_crash(tmp_path: Path) -> None:
+    result = run_check(
+        tmp_path,
+        {
+            "g0001.yaml": f"""\
+                id: g0001
+                label: 编号太长
+                plain:
+                  - lang: zh
+                    word: 说清楚
+                    issue: "{'1' * 5000}"
+                jargon:
+                  - lang: zh
+                    word: 赋能
+                    issue: 12
+                """
+        },
+    )
+
+    assert result.returncode == 1
+    assert "issue 编号" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_missing_groups_directory_exits_one(tmp_path: Path) -> None:
     result = run_cli(tmp_path / "nope")
 

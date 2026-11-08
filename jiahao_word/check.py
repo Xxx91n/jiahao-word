@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Hashable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,36 @@ LANGUAGES = ("zh", "en")
 PLAIN = "plain"
 JARGON = "jargon"
 SECTION_NAMES = {PLAIN: "大白话", JARGON: "黑话"}
-GROUP_ID = re.compile(r"g\d{4,}")
+GROUP_ID = re.compile(r"g[0-9]{4,}")
+
+
+class _StrictLoader(yaml.SafeLoader):
+    """同一个键写两次就报错，不让后一个悄悄盖掉前一个。"""
+
+
+def _construct_unique_mapping(
+    loader: _StrictLoader, node: yaml.MappingNode, deep: bool = False
+) -> dict[Any, Any]:
+    seen: set[Any] = set()
+    for key_node, value_node in node.value:
+        if key_node.tag == "tag:yaml.org,2002:merge":
+            # 合并进来的那份也可能自己写重了，先让它走一遍构造。
+            loader.construct_object(value_node, deep=deep)
+            continue
+        key = loader.construct_object(key_node, deep=deep)
+        if not isinstance(key, Hashable):
+            continue
+        if key in seen:
+            raise yaml.constructor.ConstructorError(
+                None, None, f"键「{key}」重复了", key_node.start_mark
+            )
+        seen.add(key)
+    return yaml.constructor.SafeConstructor.construct_mapping(loader, node, deep=deep)
+
+
+_StrictLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping
+)
 
 
 @dataclass(frozen=True)
@@ -60,8 +90,13 @@ def _issue_number(value: Any) -> int | None:
         return value if value > 0 else None
     if isinstance(value, str):
         text = value.strip().lstrip("#").strip()
-        if text.isdigit() and int(text) > 0:
-            return int(text)
+        # "²" 也算数字字符，可 int() 会炸，所以只认 ASCII 数字。
+        if text.isascii() and text.isdigit():
+            try:
+                number = int(text)
+            except ValueError:
+                return None
+            return number if number > 0 else None
     return None
 
 
@@ -132,6 +167,17 @@ def _read_words(
     return words, len(raw) > 0
 
 
+def _describe_yaml_error(error: Exception) -> str:
+    detail = getattr(error, "problem", None)
+    mark = getattr(error, "problem_mark", None)
+    parts = []
+    if mark is not None:
+        parts.append(f"第 {mark.line + 1} 行")
+    if detail:
+        parts.append(str(detail))
+    return "，".join(parts)
+
+
 def _load_group(path: Path, problems: list[Problem]) -> Group | None:
     where = str(path)
     try:
@@ -141,9 +187,14 @@ def _load_group(path: Path, problems: list[Problem]) -> Group | None:
         return None
 
     try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError:
-        problems.append(Problem(where, "这个文件不是能读的 YAML"))
+        data = yaml.load(text, Loader=_StrictLoader)
+    except Exception as error:
+        # 写坏的 !!int / !!bool 会抛普通 Python 错误，不能让它带 traceback 退出。
+        detail = _describe_yaml_error(error)
+        message = "这个文件不是能读的 YAML"
+        if detail:
+            message = f"{message}：{detail}"
+        problems.append(Problem(where, message))
         return None
 
     if not isinstance(data, dict):
