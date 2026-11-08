@@ -80,6 +80,16 @@ def test_section_with_only_an_empty_code_fence_exits_one(tmp_path: Path) -> None
     assert "是空的" in result.stderr
 
 
+def test_text_inside_a_code_fence_counts_as_content(tmp_path: Path) -> None:
+    result = run_body(
+        tmp_path,
+        "## 人话说明\n\n```text\n## 这段是给人看的示例\n```\n",
+    )
+
+    assert result.returncode == 0
+    assert "检查通过" in result.stdout
+
+
 def test_section_with_only_invisible_characters_exits_one(tmp_path: Path) -> None:
     result = run_body(tmp_path, "## 人话说明\n\n\u200b\u200b\n")
 
@@ -156,10 +166,7 @@ def test_heading_inside_tilde_fence_is_not_a_section(tmp_path: Path) -> None:
 
 
 def test_bom_at_the_start_does_not_hide_the_section(tmp_path: Path) -> None:
-    path = tmp_path / "pr-body.md"
-    path.write_text("\ufeff## 人话说明\n\n内容。\n", encoding="utf-8")
-
-    result = run_check_pr(path)
+    result = run_body(tmp_path, "\ufeff## 人话说明\n\n内容。\n")
 
     assert result.returncode == 0
     assert "检查通过" in result.stdout

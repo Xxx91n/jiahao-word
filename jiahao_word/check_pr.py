@@ -23,25 +23,36 @@ class _Heading:
     title: str
 
 
+@dataclass(frozen=True)
+class _Fence:
+    char: str
+    length: int
+
+
+def _fence_state(fence: _Fence | None, line: str) -> tuple[_Fence | None, str]:
+    """看这一行对围栏做了什么：开、关、围栏里的正文，还是围栏外的普通行。"""
+    match = _FENCE.match(line)
+    if fence is None:
+        if match:
+            return _Fence(match.group(1)[0], len(match.group(1))), "open"
+        return None, "text"
+    if (
+        match
+        and match.group(1)[0] == fence.char
+        and len(match.group(1)) >= fence.length
+        and not match.group(2).strip()
+    ):
+        return None, "close"
+    return fence, "inside"
+
+
 def _headings(lines: list[str]) -> list[_Heading]:
     """找标题所在的行下标；代码块里的井号不算。"""
     found: list[_Heading] = []
-    fence: str | None = None
-    fence_length = 0
+    fence: _Fence | None = None
     for index, line in enumerate(lines):
-        fence_match = _FENCE.match(line)
-        if fence is not None:
-            if (
-                fence_match
-                and fence_match.group(1)[0] == fence
-                and len(fence_match.group(1)) >= fence_length
-                and not fence_match.group(2).strip()
-            ):
-                fence = None
-            continue
-        if fence_match:
-            fence = fence_match.group(1)[0]
-            fence_length = len(fence_match.group(1))
+        fence, state = _fence_state(fence, line)
+        if state != "text":
             continue
         heading = _ATX_HEADING.match(line)
         if heading:
@@ -58,11 +69,16 @@ def _headings(lines: list[str]) -> list[_Heading]:
 def _has_content(section: str) -> bool:
     """只算看得见的大白话；注释、分隔线、小标题、围栏线都不算内容。"""
     text = _COMMENT.sub("", section)
+    fence: _Fence | None = None
     for line in text.splitlines():
-        if not line.strip():
+        fence, state = _fence_state(fence, line)
+        if state in {"open", "close"}:
             continue
-        if _ATX_HEADING.match(line) or _RULE.match(line) or _FENCE.match(line):
-            continue
+        if state == "text":
+            if not line.strip():
+                continue
+            if _ATX_HEADING.match(line) or _RULE.match(line):
+                continue
         if line.translate(_INVISIBLE).strip():
             return True
     return False
