@@ -1,0 +1,78 @@
+name: 新词入库
+description: 把一条模型说出来的黑话，或者一条对应的大白话，提进词库
+title: "[词条] "
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        谢谢帮忙补词。开 issue 之后，记得把 PR 一起开上。先读 [CONTRIBUTING.md](https://github.com/Xxx91n/jiahao-word/blob/main/CONTRIBUTING.md)。
+
+        下面的「人话说明」只能由人自己写。Agent 可以帮你开 issue、开 PR、跑检查，但不能替你写这一段。
+
+  - type: textarea
+    id: entry
+    attributes:
+      label: 这次要加什么词
+      description: 写清楚黑话和大白话分别是什么、各属于哪种语言；知道该归到哪个组也一起写上。
+      placeholder: 黑话：赋能（zh）。大白话：说清楚（zh）、make it clear（en）。想归到 g0001。
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: "## 来源证据"
+
+  - type: markdown
+    attributes:
+      value: |
+        这四个问题都得回答，别人要靠它们确认这个词真的是模型说出来的。时间和截图、链接能补就补。
+
+  - type: input
+    id: source-agent
+    attributes:
+      label: 哪个 Agent
+      description: 产出这个词的 Agent。
+      placeholder: Claude Code
+    validations:
+      required: true
+
+  - type: input
+    id: source-model
+    attributes:
+      label: 哪个模型
+      description: Agent 背后用的模型名字和版本，能写多细写多细。
+      placeholder: claude-sonnet-4.5
+    validations:
+      required: true
+
+  - type: input
+    id: source-thinking
+    attributes:
+      label: 什么思考强度
+      description: 这次对话用的思考强度或推理档位。真不知道就写「不知道」，不要空着。
+      placeholder: high
+    validations:
+      required: true
+
+  - type: textarea
+    id: source-context
+    attributes:
+      label: 大致喂了什么上下文
+      description: 不用贴全文，说个大概：什么任务、给了哪些代码或文档，才让模型说出这个词。
+      placeholder: 让它改一个 Python 项目的 README，给了贡献指南和旧版说明。
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: "## 人话说明"
+
+  - type: textarea
+    id: human-note
+    attributes:
+      label: 人话说明
+      description: 用你自己的大白话讲清楚：为什么这个词该进库，你是在哪儿撞见它的。这一段必须由人写，Agent 不能代写。
+      placeholder: 我在让它写 README 时看到「赋能使用体验」，其实它就是想说「让使用体验更好」。
+    validations:
+      required: true
