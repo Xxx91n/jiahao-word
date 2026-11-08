@@ -9,6 +9,9 @@ description = "把黑话翻成大白话的小词库"
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6.0"]
 
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
 [project.scripts]
 jiahao-word = "jiahao_word.cli:main"
 
