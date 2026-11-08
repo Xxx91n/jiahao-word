@@ -100,6 +100,26 @@ def test_heading_inside_code_fence_is_not_a_section(tmp_path: Path) -> None:
     assert "缺「## 人话说明」" in result.stderr
 
 
+def test_heading_inside_tilde_fence_is_not_a_section(tmp_path: Path) -> None:
+    result = run_body(
+        tmp_path,
+        "~~~\n## 人话说明\n\n这里才有字。\n~~~\n",
+    )
+
+    assert result.returncode == 1
+    assert "缺「## 人话说明」" in result.stderr
+
+
+def test_bom_at_the_start_does_not_hide_the_section(tmp_path: Path) -> None:
+    path = tmp_path / "pr-body.md"
+    path.write_text("\ufeff## 人话说明\n\n内容。\n", encoding="utf-8")
+
+    result = run_check_pr(path)
+
+    assert result.returncode == 0
+    assert "检查通过" in result.stdout
+
+
 def test_unreadable_body_file_exits_one(tmp_path: Path) -> None:
     result = run_check_pr(tmp_path / "missing.md")
 

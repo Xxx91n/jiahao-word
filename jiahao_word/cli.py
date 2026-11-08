@@ -19,7 +19,7 @@ def _report_problems(problems: list[Problem]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="jiahao-word",
-        description="检查词库数据，一次把所有问题列出来。",
+        description="检查词库数据和 PR 描述，一次把所有问题列出来。",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -53,11 +53,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "check-pr":
         try:
             if args.body_file == "-":
-                body = sys.stdin.read()
+                body = sys.stdin.read().removeprefix("\ufeff")
             else:
-                body = Path(args.body_file).read_text(encoding="utf-8")
+                body = Path(args.body_file).read_text(encoding="utf-8-sig")
         except (OSError, UnicodeDecodeError) as error:
-            print(f"{args.body_file}：这个文件读不了：{error}", file=sys.stderr)
+            _report_problems([Problem(args.body_file, f"这个文件读不了：{error}")])
             return 1
 
         problems = check_pr_body(body)
