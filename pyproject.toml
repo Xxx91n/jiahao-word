@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jiahao-word"
+version = "0.1.0"
+description = "把黑话翻成大白话的小词库"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6.0"]
+
+[project.scripts]
+jiahao-word = "jiahao_word.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["jiahao_word"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
