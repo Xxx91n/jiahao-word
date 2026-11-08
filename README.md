@@ -1,39 +1,49 @@
-# jiahao-word
+<h1 align="center">jiahao-word</h1>
 
-模型写出来的中文或英文里，常冒出一眼看不懂的词。这个仓库把这些词和「同一种语言里说人话的说法」对上，也顺手把另一种语言的说法摆在一起。查一个词，就能知道它大概在说什么，以及换成中文或英文该怎么说。
+<p align="center">
+  <b>English</b> | <a href="README_zh.md">中文</a>
+</p>
 
-只收模型写出来的黑话，翻译腔也算。普通词典里的词不收。
+When LLMs write, they often throw out buzzwords that make no sense at first glance.
 
-## 怎么查词
+This repo pairs those buzzwords with plain-language equivalents, and links matching phrases across languages.
 
-仓库里已经生成好两份索引：`index/zh.json` 查中文，`index/en.json` 查英文。clone 下来就能用，不用自己跑命令。
+Look up a word you don't recognize to see what it actually means, and how to say it naturally in English or Chinese.
 
-1. 用编辑器打开 `index/zh.json` 或 `index/en.json`，搜你要查的词。每个词后面紧跟一个方括号，里面就是它落到的所有组，带组编号、标签和 `env`。在命令行搜的话，用 `grep -i -A 20 '词' index/en.json`，把匹配行和后面的候选一起打出来，候选多时把 20 调大。英文索引里的词都转成了小写，查询词也要转成小写。
-2. 搜到以后，看它落在哪个组，比如 `g0001`。
-3. 打开 `groups/g0001.yaml`。里面是这个意思对应的黑话，以及中文和英文里的各种大白话说法。
+We only collect AI jargon and translationese. Regular dictionary words are out of scope.
 
-一个词可能落到好几个组。每个结果都带组编号、一句标签（这组大概在说什么）和 `env`（这个词用在什么场合）；标签和 `env` 可能是空的，有内容时靠它们挑。组文件里某种语言下面是空的，表示这个语言暂时没有对应说法，不是数据漏了。
+## How to look up words
 
-## 怎么贡献
+Use the indexes in this repo:
+- Chinese: `index/zh.json`
+- English: `index/en.json`
 
-词要进库，先开 issue，再把 PR 一起开上，不要直接改数据文件。
+1. Open `index/zh.json` or `index/en.json` in your editor and search for the word. Each word is followed by a bracketed list of every group it belongs to, including the group ID, a label, and `env`. On the command line, run `grep -i -A 20 'word' index/en.json` to show matching lines and nearby candidates (bump up 20 if there are lots of matches). Words in the English index are converted to lowercase, so make sure your query is lowercase too.
+2. Once you find it, check which group it maps to, like `g0001`.
+3. Open `groups/g0001.yaml`. Inside, you will find the jargon term along with plain-language alternatives in both Chinese and English.
 
-- 开新词 issue：用 [「新词入库」模板](https://github.com/Xxx91n/jiahao-word/issues/new/choose)。
-- 模板里的四个来源问题都要回答：哪个 Agent、哪个模型、什么思考强度、大致喂了什么上下文。
-- 「人话说明」必须由你自己写，Agent 不能代写。
-- 完整流程、本地检查命令和审核标准都在 [CONTRIBUTING.md](CONTRIBUTING.md)。
+> A single word can belong to multiple groups. Each result includes a group ID, a short label (a quick summary of the group), and `env` (where the word gets used); the label and `env` may be empty, but they help you pick the right group when present. If a language section in a group file is empty, that language simply does not have a matching phrase yet—it is not missing data.
 
-改了 `groups/` 里的数据，要把 `build` 生成的 README 对照表和 `index/` 一起提交。
+## How to contribute
 
-## 对照表
+To add a word, open an issue first, then open a pull request.
 
-下面这张表由 `python -m jiahao_word build` 生成，不要手改。表格外面的话是手写的。现在还没有真实词条；第一条等真人来贡献，不替人编内容。
+- Open a new-word issue: use the [New Entry template](https://github.com/Xxx91n/jiahao-word/issues/new/choose).
+- Answer all four source questions in the template: which agent, which model, what reasoning effort, and roughly what prompt/context you gave it.
+- You must write the plain-language explanation yourself—agents cannot write it for you.
+- See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, local check commands, and review standards.
+
+Whenever you change data in `groups/`, run `build` and commit the generated README table and `index/` files together.
+
+## Comparison Table
+
+> BY `python -m jiahao_word build`
 
 <!-- generated:start -->
 | 黑话 | 大白话 | 标签 | 用在哪 |
 | --- | --- | --- | --- |
 <!-- generated:end -->
 
-## 许可证
+## License
 
-仓库内容用 CC0 1.0 释出，想拿去用、改、嵌进自己的工具都行，不用署名。全文见 [LICENSE](LICENSE)。
+[CC0 1.0](LICENSE).
