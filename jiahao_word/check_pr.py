@@ -21,6 +21,7 @@ class _Heading:
     index: int
     level: int
     title: str
+    comment_open: bool
 
 
 @dataclass(frozen=True)
@@ -88,15 +89,16 @@ def _headings(lines: list[str]) -> list[_Heading]:
                     index=index,
                     level=len(heading.group(1)),
                     title=heading.group(2).strip(),
+                    comment_open=in_comment,
                 )
             )
     return found
 
 
-def _has_content(section: str) -> bool:
+def _has_content(section: str, comment_open: bool = False) -> bool:
     """只算看得见的大白话；注释、分隔线、小标题、围栏线都不算内容。"""
     fence: _Fence | None = None
-    in_comment = False
+    in_comment = comment_open
     for line in section.splitlines():
         if in_comment:
             line, in_comment = _strip_comments(line, True)
@@ -137,7 +139,7 @@ def check_pr_body(text: str) -> list[Problem]:
             break
 
     section = "\n".join(lines[target.index + 1 : end])
-    if _has_content(section):
+    if _has_content(section, target.comment_open):
         return []
     return [
         Problem("PR 描述", f"「## {SECTION_NAME}」这一段是空的，写点实际内容再跑一次")

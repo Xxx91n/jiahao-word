@@ -73,6 +73,18 @@ def test_unclosed_placeholder_comment_exits_one(tmp_path: Path) -> None:
     assert "是空的" in result.stderr
 
 
+def test_comment_left_open_on_the_heading_line_exits_one(
+    tmp_path: Path,
+) -> None:
+    result = run_body(
+        tmp_path,
+        "## 人话说明 <!-- 请在这里写\n只有注释正文\n-->\n",
+    )
+
+    assert result.returncode == 1
+    assert "是空的" in result.stderr
+
+
 def test_comment_inside_a_code_fence_counts_as_content(tmp_path: Path) -> None:
     result = run_body(
         tmp_path,
