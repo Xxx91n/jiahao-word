@@ -18,7 +18,7 @@ def _report_problems(problems: list[Problem]) -> None:
 
 def _read_body(body_file: str) -> str:
     if body_file == "-":
-        return sys.stdin.read().removeprefix("\ufeff")
+        return sys.stdin.buffer.read().decode("utf-8-sig")
     return Path(body_file).read_text(encoding="utf-8-sig")
 
 

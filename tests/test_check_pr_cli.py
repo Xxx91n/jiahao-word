@@ -59,6 +59,30 @@ def test_section_with_only_a_placeholder_comment_exits_one(tmp_path: Path) -> No
     assert "是空的" in result.stderr
 
 
+def test_heading_inside_a_comment_is_not_a_section(tmp_path: Path) -> None:
+    result = run_body(tmp_path, "<!--\n## 人话说明\n-->\n")
+
+    assert result.returncode == 1
+    assert "缺「## 人话说明」" in result.stderr
+
+
+def test_unclosed_placeholder_comment_exits_one(tmp_path: Path) -> None:
+    result = run_body(tmp_path, "## 人话说明\n\n<!-- 请在这里写\n")
+
+    assert result.returncode == 1
+    assert "是空的" in result.stderr
+
+
+def test_comment_inside_a_code_fence_counts_as_content(tmp_path: Path) -> None:
+    result = run_body(
+        tmp_path,
+        "## 人话说明\n\n```html\n<!-- 这里是给人看的示例 -->\n```\n",
+    )
+
+    assert result.returncode == 0
+    assert "检查通过" in result.stdout
+
+
 def test_section_with_only_a_horizontal_rule_exits_one(tmp_path: Path) -> None:
     result = run_body(tmp_path, "## 人话说明\n\n---\n")
 
