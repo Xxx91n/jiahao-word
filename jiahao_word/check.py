@@ -24,6 +24,7 @@ class _StrictLoader(yaml.SafeLoader):
 def _construct_unique_mapping(
     loader: _StrictLoader, node: yaml.MappingNode, deep: bool = False
 ) -> dict[Any, Any]:
+    """同一个键写两次就报错。"""
     seen: set[Any] = set()
     for key_node, value_node in node.value:
         if key_node.tag == "tag:yaml.org,2002:merge":
@@ -52,6 +53,7 @@ class Problem:
     message: str
 
     def __str__(self) -> str:
+        """打印成「哪里：什么问题」。"""
         return f"{self.where}：{self.message}"
 
 
@@ -81,10 +83,12 @@ def normalize_word(lang: str, word: str) -> str:
 
 
 def _word_key(word: Word) -> tuple[str, str]:
+    """查重时用的（语言，词）键。"""
     return (word.lang, normalize_word(word.lang, word.word))
 
 
 def _issue_number(value: Any) -> int | None:
+    """把 issue 编号转成正整数，写错就返回 None。"""
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -107,6 +111,7 @@ def _read_words(
     section: str,
     problems: list[Problem],
 ) -> tuple[list[Word], bool]:
+    """读一段词列表，坏条目记成问题，不中断。"""
     raw = data.get(section)
     if raw is None:
         return [], False
@@ -169,6 +174,7 @@ def _read_words(
 
 
 def _describe_yaml_error(error: Exception) -> str:
+    """把 YAML 报错压成一行人话。"""
     detail = getattr(error, "problem", None)
     mark = getattr(error, "problem_mark", None)
     parts = []
@@ -180,6 +186,7 @@ def _describe_yaml_error(error: Exception) -> str:
 
 
 def _load_group(path: Path, problems: list[Problem]) -> Group | None:
+    """读一个组文件，读不了就记问题并返回 None。"""
     where = str(path)
     try:
         text = path.read_text(encoding="utf-8")
@@ -242,6 +249,7 @@ def _load_group(path: Path, problems: list[Problem]) -> Group | None:
 
 
 def _group_files(groups_dir: Path) -> list[Path]:
+    """列出目录里的组文件，按文件名排好。"""
     if not groups_dir.is_dir():
         return []
     files = [
@@ -253,6 +261,7 @@ def _group_files(groups_dir: Path) -> list[Path]:
 
 
 def _check_one_group(group: Group, problems: list[Problem]) -> None:
+    """检查单个组内部的问题。"""
     if not group.has_jargon:
         problems.append(Problem(group.where, "这个组没有黑话，组得由一条黑话带出来"))
 

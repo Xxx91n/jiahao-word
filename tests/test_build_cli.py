@@ -55,6 +55,7 @@ README = (
 def run_build(
     groups: Path, readme: Path, index_dir: Path
 ) -> subprocess.CompletedProcess[str]:
+    """用子进程跑 build 子命令，返回它的结果。"""
     return subprocess.run(
         [
             sys.executable,
@@ -72,6 +73,7 @@ def run_build(
         capture_output=True,
         text=True,
         encoding="utf-8",
+        check=False,
         env={
             **os.environ,
             "PYTHONPATH": str(REPO_ROOT),
@@ -81,6 +83,7 @@ def run_build(
 
 
 def make_data(tmp_path: Path, files: dict[str, str]) -> tuple[Path, Path, Path]:
+    """在临时目录里放好组文件、README 和空的索引目录。"""
     groups = tmp_path / "groups"
     groups.mkdir(parents=True)
     for name, content in files.items():
@@ -94,6 +97,7 @@ def make_data(tmp_path: Path, files: dict[str, str]) -> tuple[Path, Path, Path]:
 
 
 def test_only_the_generated_block_is_replaced(tmp_path: Path) -> None:
+    """标记外的介绍和页脚一个字节都不动。"""
     groups, readme, index_dir = make_data(tmp_path, {"g0001.yaml": GROUP_ONE})
 
     result = run_build(groups, readme, index_dir)
@@ -108,6 +112,7 @@ def test_only_the_generated_block_is_replaced(tmp_path: Path) -> None:
 
 
 def test_index_is_generated_per_language(tmp_path: Path) -> None:
+    """zh 和 en 各有一份索引，查词能拿到组和类型。"""
     groups, readme, index_dir = make_data(tmp_path, {"g0001.yaml": GROUP_ONE})
 
     result = run_build(groups, readme, index_dir)
@@ -126,6 +131,7 @@ def test_index_is_generated_per_language(tmp_path: Path) -> None:
 
 
 def test_running_twice_produces_the_same_files(tmp_path: Path) -> None:
+    """同一份数据连跑两次，README 和索引完全一样。"""
     groups, readme, index_dir = make_data(
         tmp_path,
         {
@@ -150,6 +156,7 @@ def test_running_twice_produces_the_same_files(tmp_path: Path) -> None:
 
 
 def test_groups_are_rendered_in_id_order(tmp_path: Path) -> None:
+    """组按编号顺序进表，不按文件创建顺序。"""
     groups, readme, index_dir = make_data(
         tmp_path,
         {
@@ -166,6 +173,7 @@ def test_groups_are_rendered_in_id_order(tmp_path: Path) -> None:
 
 
 def test_group_order_is_numeric_not_lexicographic(tmp_path: Path) -> None:
+    """g9999 排在 g10000 前面，按数字比大小。"""
     groups, readme, index_dir = make_data(
         tmp_path,
         {
@@ -203,7 +211,94 @@ def test_group_order_is_numeric_not_lexicographic(tmp_path: Path) -> None:
     assert text.index("黑话甲") < text.index("黑话乙")
 
 
+def test_index_candidates_follow_numeric_group_order(tmp_path: Path) -> None:
+    """索引里同一个词的多个候选也按编号数字排。"""
+    groups, readme, index_dir = make_data(
+        tmp_path,
+        {
+            "g10000.yaml": """\
+                id: g10000
+                label: 一万
+                plain:
+                  - lang: zh
+                    word: 同一个说法
+                    issue: 12
+                    env: 后一个场合
+                jargon:
+                  - lang: zh
+                    word: 黑话乙
+                    issue: 12
+                """,
+            "g9999.yaml": """\
+                id: g9999
+                label: 九千
+                plain:
+                  - lang: zh
+                    word: 同一个说法
+                    issue: 12
+                    env: 前一个场合
+                jargon:
+                  - lang: zh
+                    word: 黑话甲
+                    issue: 12
+                """,
+        },
+    )
+
+    result = run_build(groups, readme, index_dir)
+
+    assert result.returncode == 0
+    zh = json.loads((index_dir / "zh.json").read_text(encoding="utf-8"))
+    assert [item["group"] for item in zh["同一个说法"]] == ["g9999", "g10000"]
+
+
+def test_table_escapes_backslashes_and_pipes(tmp_path: Path) -> None:
+    """词里带反斜杠和竖线时，表格列数不乱。"""
+    groups, readme, index_dir = make_data(
+        tmp_path,
+        {
+            "g0001.yaml": """\
+                id: g0001
+                label: 转义
+                plain:
+                  - lang: zh
+                    word: 说清楚
+                    issue: 12
+                jargon:
+                  - lang: zh
+                    word: 'a\\|b'
+                    issue: 12
+                """
+        },
+    )
+
+    result = run_build(groups, readme, index_dir)
+
+    assert result.returncode == 0
+    text = readme.read_text(encoding="utf-8")
+    assert r"| a\\\|b (zh) | 说清楚 (zh) | 转义 | — |" in text
+
+
+def test_write_failure_keeps_files_and_cleans_temp_files(tmp_path: Path) -> None:
+    """写不进去时旧 README 不动，临时文件也清干净。"""
+    groups, readme, index_dir = make_data(tmp_path, {"g0001.yaml": GROUP_ONE})
+    index_dir.mkdir()
+    (index_dir / "zh.json").mkdir()
+    (index_dir / "zh.json" / "挡住").write_text("x", encoding="utf-8")
+    before = readme.read_bytes()
+
+    result = run_build(groups, readme, index_dir)
+
+    assert result.returncode == 1
+    assert "写文件失败" in result.stderr
+    assert readme.read_bytes() == before
+    assert not (index_dir / "en.json").exists()
+    assert list(index_dir.glob("*.tmp")) == []
+    assert list(tmp_path.glob("README.md.*.tmp")) == []
+
+
 def test_two_fresh_runs_produce_the_same_files(tmp_path: Path) -> None:
+    """两个全新目录用同一份数据，产出的文件逐字节相同。"""
     files = {"g0002.yaml": GROUP_TWO, "g0001.yaml": GROUP_ONE}
     first_groups, first_readme, first_index = make_data(tmp_path / "first", files)
     second_groups, second_readme, second_index = make_data(tmp_path / "second", files)
@@ -223,6 +318,7 @@ def test_two_fresh_runs_produce_the_same_files(tmp_path: Path) -> None:
 
 
 def test_missing_markers_exits_one_and_writes_nothing(tmp_path: Path) -> None:
+    """README 没有标记就退出 1，不动文件也不建索引。"""
     groups, _readme, index_dir = make_data(tmp_path, {"g0001.yaml": GROUP_ONE})
     readme = tmp_path / "README.md"
     readme.write_text("# 没有标记\n", encoding="utf-8")
@@ -236,6 +332,7 @@ def test_missing_markers_exits_one_and_writes_nothing(tmp_path: Path) -> None:
 
 
 def test_bad_data_exits_one_and_writes_nothing(tmp_path: Path) -> None:
+    """数据有问题就退出 1，不生成半成品。"""
     groups, readme, index_dir = make_data(
         tmp_path,
         {

@@ -24,6 +24,7 @@ def _read_body(body_file: str) -> str:
 
 
 def _add_groups_option(parser: argparse.ArgumentParser) -> None:
+    """给子命令加上 --groups 选项。"""
     parser.add_argument(
         "--groups",
         type=Path,
@@ -33,6 +34,7 @@ def _add_groups_option(parser: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """本地和 CI 都从这里进。"""
     parser = argparse.ArgumentParser(
         prog="jiahao-word",
         description="检查词库数据和 PR 描述，一次把所有问题列出来。",

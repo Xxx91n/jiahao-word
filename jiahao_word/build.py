@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
 from .check import JARGON, LANGUAGES, PLAIN, Group, normalize_word, scan_groups
@@ -20,24 +22,40 @@ class BuildError(Exception):
 
 
 def _language_rank(lang: str) -> int:
+    """zh 在前、en 在后，排序才稳定。"""
     return LANGUAGES.index(lang)
 
 
 def _table_cell(text: str) -> str:
-    return text.replace("|", "\\|").replace("\r", " ").replace("\n", " ").strip()
+    """把内容收拾成能放进 Markdown 表格的一格。"""
+    return (
+        text.replace("\\", "\\\\")
+        .replace("|", "\\|")
+        .replace("\r", " ")
+        .replace("\n", " ")
+        .strip()
+    )
 
 
 def _format_word(word) -> str:
+    """词后面带上语言标签。"""
     return f"{_table_cell(word.word)} ({word.lang})"
 
 
 def _word_sort_key(word) -> tuple[int, str]:
+    """先按语言顺序，再按查重时用的写法。"""
     return (_language_rank(word.lang), normalize_word(word.lang, word.word))
 
 
+def _group_id_sort_key(group_id: str) -> tuple[int, str]:
+    """按编号里的数字排，g9999 排在 g10000 前面。"""
+    digits = group_id[1:]
+    return (int(digits) if digits.isdigit() else 0, group_id)
+
+
 def _group_sort_key(group: Group) -> tuple[int, str]:
-    digits = group.id[1:]
-    return (int(digits) if digits.isdigit() else 0, group.id)
+    """组的排序键。"""
+    return _group_id_sort_key(group.id)
 
 
 def _plain_text(group: Group, jargon_lang: str) -> str:
@@ -91,12 +109,36 @@ def render_indexes(groups: list[Group]) -> dict[str, str]:
         entries = buckets[lang]
         for key, candidates in entries.items():
             candidates.sort(
-                key=lambda item: (item["group"] or "", item["kind"] or "", item["env"] or "")
+                key=lambda item: (
+                    _group_id_sort_key(item["group"] or ""),
+                    item["kind"] or "",
+                    item["env"] or "",
+                )
             )
         result[lang] = (
             json.dumps(entries, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
         )
     return result
+
+
+def _stage(path: Path, content: str) -> Path:
+    """把内容写到同目录的临时文件，返回临时文件的路径。"""
+    fd, name = tempfile.mkstemp(
+        dir=path.parent, prefix=path.name + ".", suffix=".tmp"
+    )
+    temp = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(content.encode("utf-8"))
+        try:
+            mode = path.stat().st_mode & 0o777
+        except OSError:
+            mode = 0o644
+        os.chmod(temp, mode)
+    except OSError:
+        temp.unlink(missing_ok=True)
+        raise
+    return temp
 
 
 def replace_block(text: str, table: str) -> str:
@@ -131,12 +173,20 @@ def generate(groups_dir: Path, readme_path: Path, index_dir: Path) -> tuple[int,
     new_text = replace_block(text, table)
     indexes = render_indexes(groups)
 
+    staged: list[tuple[Path, Path]] = []
     try:
-        readme_path.write_bytes(new_text.encode("utf-8"))
         index_dir.mkdir(parents=True, exist_ok=True)
         for lang, content in indexes.items():
-            (index_dir / f"{lang}.json").write_bytes(content.encode("utf-8"))
+            target = index_dir / f"{lang}.json"
+            staged.append((_stage(target, content), target))
+        staged.append((_stage(readme_path, new_text), readme_path))
+        # 内容先全写进临时文件，再逐个换上去；写临时文件失败时已有文件不动。
+        # 多个文件之间不是一次原子操作，换到一半失败要靠漂移检查发现。
+        for temp, target in staged:
+            os.replace(temp, target)
     except OSError as error:
+        for temp, _ in staged:
+            temp.unlink(missing_ok=True)
         raise BuildError(f"写文件失败：{error}") from error
 
     return len(groups), len(indexes)
