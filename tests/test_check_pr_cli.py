@@ -52,6 +52,51 @@ def test_whitespace_only_section_exits_one(tmp_path: Path) -> None:
     assert "是空的" in result.stderr
 
 
+def test_section_with_only_a_placeholder_comment_exits_one(tmp_path: Path) -> None:
+    result = run_body(tmp_path, "## 人话说明\n\n<!-- 待补充 -->\n")
+
+    assert result.returncode == 1
+    assert "是空的" in result.stderr
+
+
+def test_section_with_only_a_horizontal_rule_exits_one(tmp_path: Path) -> None:
+    result = run_body(tmp_path, "## 人话说明\n\n---\n")
+
+    assert result.returncode == 1
+    assert "是空的" in result.stderr
+
+
+def test_section_with_only_a_subheading_exits_one(tmp_path: Path) -> None:
+    result = run_body(tmp_path, "## 人话说明\n\n### 背景\n")
+
+    assert result.returncode == 1
+    assert "是空的" in result.stderr
+
+
+def test_section_with_only_an_empty_code_fence_exits_one(tmp_path: Path) -> None:
+    result = run_body(tmp_path, "## 人话说明\n\n```text\n```\n")
+
+    assert result.returncode == 1
+    assert "是空的" in result.stderr
+
+
+def test_section_with_only_invisible_characters_exits_one(tmp_path: Path) -> None:
+    result = run_body(tmp_path, "## 人话说明\n\n\u200b\u200b\n")
+
+    assert result.returncode == 1
+    assert "是空的" in result.stderr
+
+
+def test_comment_beside_real_text_exits_zero(tmp_path: Path) -> None:
+    result = run_body(
+        tmp_path,
+        "## 人话说明\n\n<!-- 说明 -->\n这段说的是把机器话翻成人能懂的话。\n",
+    )
+
+    assert result.returncode == 0
+    assert "检查通过" in result.stdout
+
+
 def test_section_with_real_text_exits_zero(tmp_path: Path) -> None:
     result = run_body(
         tmp_path,

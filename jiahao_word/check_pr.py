@@ -11,6 +11,9 @@ SECTION_NAME = "人话说明"
 
 _ATX_HEADING = re.compile(r"^[ \t]{0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
 _FENCE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})(.*)$")
+_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+_RULE = re.compile(r"^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$")
+_INVISIBLE = dict.fromkeys(map(ord, "\u200b\u200c\u200d\ufeff"), None)
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,19 @@ def _headings(lines: list[str]) -> list[_Heading]:
     return found
 
 
+def _has_content(section: str) -> bool:
+    """只算看得见的大白话；注释、分隔线、小标题、围栏线都不算内容。"""
+    text = _COMMENT.sub("", section)
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        if _ATX_HEADING.match(line) or _RULE.match(line) or _FENCE.match(line):
+            continue
+        if line.translate(_INVISIBLE).strip():
+            return True
+    return False
+
+
 def check_pr_body(text: str) -> list[Problem]:
     """段不在、或段里只有空白，都算问题；有实际内容就没有问题。"""
     lines = text.splitlines()
@@ -63,7 +79,7 @@ def check_pr_body(text: str) -> list[Problem]:
             target = heading
             break
     if target is None:
-        return [Problem("PR 描述", "缺「## 人话说明」这一段，补上再跑一次")]
+        return [Problem("PR 描述", f"缺「## {SECTION_NAME}」这一段，补上再跑一次")]
 
     end = len(lines)
     for heading in headings:
@@ -72,6 +88,8 @@ def check_pr_body(text: str) -> list[Problem]:
             break
 
     section = "\n".join(lines[target.index + 1 : end])
-    if section.strip():
+    if _has_content(section):
         return []
-    return [Problem("PR 描述", "「## 人话说明」这一段是空的，写点实际内容再跑一次")]
+    return [
+        Problem("PR 描述", f"「## {SECTION_NAME}」这一段是空的，写点实际内容再跑一次")
+    ]

@@ -7,13 +7,19 @@ import sys
 from pathlib import Path
 
 from .check import Problem, check_groups
-from .check_pr import check_pr_body
+from .check_pr import SECTION_NAME, check_pr_body
 
 
 def _report_problems(problems: list[Problem]) -> None:
     for problem in problems:
         print(problem, file=sys.stderr)
     print(f"共 {len(problems)} 处问题，改完再跑一次。", file=sys.stderr)
+
+
+def _read_body(body_file: str) -> str:
+    if body_file == "-":
+        return sys.stdin.read().removeprefix("\ufeff")
+    return Path(body_file).read_text(encoding="utf-8-sig")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -32,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     check_pr_parser = sub.add_parser(
-        "check-pr", help="检查 PR 描述里的「人话说明」段"
+        "check-pr", help=f"检查 PR 描述里的「{SECTION_NAME}」段"
     )
     check_pr_parser.add_argument(
         "--body-file",
@@ -52,10 +58,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "check-pr":
         try:
-            if args.body_file == "-":
-                body = sys.stdin.read().removeprefix("\ufeff")
-            else:
-                body = Path(args.body_file).read_text(encoding="utf-8-sig")
+            body = _read_body(args.body_file)
         except (OSError, UnicodeDecodeError) as error:
             _report_problems([Problem(args.body_file, f"这个文件读不了：{error}")])
             return 1
