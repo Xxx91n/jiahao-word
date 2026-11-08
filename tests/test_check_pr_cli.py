@@ -10,26 +10,26 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def run_check_pr(body_path: Path) -> subprocess.CompletedProcess[str]:
+def run_cli(
+    args: list[str], stdin: str | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "jiahao_word",
-            "check-pr",
-            "--body-file",
-            str(body_path),
-        ],
+        [sys.executable, "-m", "jiahao_word", *args],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         encoding="utf-8",
+        input=stdin,
         env={
             **os.environ,
             "PYTHONPATH": str(REPO_ROOT),
             "PYTHONIOENCODING": "utf-8",
         },
     )
+
+
+def run_check_pr(body_path: Path) -> subprocess.CompletedProcess[str]:
+    return run_cli(["check-pr", "--body-file", str(body_path)])
 
 
 def run_body(tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
@@ -63,10 +63,27 @@ def test_section_with_real_text_exits_zero(tmp_path: Path) -> None:
     assert result.stderr == ""
 
 
+def test_body_can_be_piped_from_stdin() -> None:
+    result = run_cli(["check-pr"], stdin="## 人话说明\n\n内容。\n")
+
+    assert result.returncode == 0
+    assert "检查通过" in result.stdout
+
+
 def test_text_in_a_later_section_does_not_count(tmp_path: Path) -> None:
     result = run_body(
         tmp_path,
         "## 人话说明\n\n## 别的段\n\n这里才有字。\n",
+    )
+
+    assert result.returncode == 1
+    assert "是空的" in result.stderr
+
+
+def test_later_copy_does_not_rescue_an_empty_section(tmp_path: Path) -> None:
+    result = run_body(
+        tmp_path,
+        "## 人话说明\n\n  \n\n## 人话说明\n\n这里才有字。\n",
     )
 
     assert result.returncode == 1

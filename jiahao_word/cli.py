@@ -36,8 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     check_pr_parser.add_argument(
         "--body-file",
-        type=Path,
-        default=Path("-"),
+        default="-",
         help="PR 描述文件；写 - 或省略就从标准输入读",
     )
 
@@ -53,10 +52,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "check-pr":
         try:
-            if str(args.body_file) == "-":
+            if args.body_file == "-":
                 body = sys.stdin.read()
             else:
-                body = args.body_file.read_text(encoding="utf-8")
+                body = Path(args.body_file).read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as error:
             print(f"{args.body_file}：这个文件读不了：{error}", file=sys.stderr)
             return 1

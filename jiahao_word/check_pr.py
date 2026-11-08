@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from .check import Problem
 
@@ -12,12 +13,19 @@ _ATX_HEADING = re.compile(r"^[ \t]{0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
 _FENCE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})(.*)$")
 
 
-def _headings(lines: list[str]) -> list[tuple[int, int, str]]:
-    """返回（行号，层级，标题）；代码块里的井号不算。"""
-    found: list[tuple[int, int, str]] = []
+@dataclass(frozen=True)
+class _Heading:
+    index: int
+    level: int
+    title: str
+
+
+def _headings(lines: list[str]) -> list[_Heading]:
+    """找标题所在的行下标；代码块里的井号不算。"""
+    found: list[_Heading] = []
     fence: str | None = None
     fence_length = 0
-    for number, line in enumerate(lines):
+    for index, line in enumerate(lines):
         fence_match = _FENCE.match(line)
         if fence is not None:
             if (
@@ -34,7 +42,13 @@ def _headings(lines: list[str]) -> list[tuple[int, int, str]]:
             continue
         heading = _ATX_HEADING.match(line)
         if heading:
-            found.append((number, len(heading.group(1)), heading.group(2).strip()))
+            found.append(
+                _Heading(
+                    index=index,
+                    level=len(heading.group(1)),
+                    title=heading.group(2).strip(),
+                )
+            )
     return found
 
 
@@ -42,25 +56,22 @@ def check_pr_body(text: str) -> list[Problem]:
     """段不在、或段里只有空白，都算问题；有实际内容就没有问题。"""
     lines = text.splitlines()
     headings = _headings(lines)
-    target_indexes = [
-        index
-        for index, (_, level, title) in enumerate(headings)
-        if level == 2 and title == SECTION_NAME
-    ]
 
-    if not target_indexes:
+    target: _Heading | None = None
+    for heading in headings:
+        if heading.level == 2 and heading.title == SECTION_NAME:
+            target = heading
+            break
+    if target is None:
         return [Problem("PR 描述", "缺「## 人话说明」这一段，补上再跑一次")]
 
-    sections: list[str] = []
-    for index in target_indexes:
-        start = headings[index][0]
-        end = len(lines)
-        for number, level, _ in headings[index + 1 :]:
-            if level <= 2:
-                end = number
-                break
-        sections.append("\n".join(lines[start + 1 : end]))
+    end = len(lines)
+    for heading in headings:
+        if heading.index > target.index and heading.level <= 2:
+            end = heading.index
+            break
 
-    if any(section.strip() for section in sections):
+    section = "\n".join(lines[target.index + 1 : end])
+    if section.strip():
         return []
-    return [Problem("PR 描述", "「## 人话说明」这一段是空的，写点人话再跑一次")]
+    return [Problem("PR 描述", "「## 人话说明」这一段是空的，写点实际内容再跑一次")]
