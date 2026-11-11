@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .build import BuildError, generate
+from .build import API_DATA_NAME, BuildError, generate
 from .check import Problem, check_groups
 from .check_pr import SECTION_NAME, check_pr_body
 
@@ -44,7 +44,9 @@ def main(argv: list[str] | None = None) -> int:
     check_parser = sub.add_parser("check", help="检查组文件里的数据")
     _add_groups_option(check_parser)
 
-    build_parser = sub.add_parser("build", help="生成 README 对照表和按语言的检索索引")
+    build_parser = sub.add_parser(
+        "build", help="生成 README 对照表、按语言的检索索引和整包查询数据"
+    )
     _add_groups_option(build_parser)
     build_parser.add_argument(
         "--readme",
@@ -57,6 +59,12 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=Path("index"),
         help="检索索引写到哪个目录，默认是 index",
+    )
+    build_parser.add_argument(
+        "--api-dir",
+        type=Path,
+        default=Path("api"),
+        help="整包查询数据写到哪个目录，默认是 api",
     )
 
     check_pr_parser = sub.add_parser(
@@ -94,15 +102,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "build":
         try:
-            group_count, index_count = generate(
-                args.groups, args.readme, args.index_dir
+            group_count = generate(
+                args.groups, args.readme, args.index_dir, args.api_dir
             )
         except BuildError as error:
             print(error, file=sys.stderr)
             return 1
         print(
             f"生成完成：{group_count} 个组，对照表写进 {args.readme}，"
-            f"{index_count} 份索引写进 {args.index_dir}。"
+            f"索引写进 {args.index_dir}，整包数据写进 {args.api_dir / API_DATA_NAME}。"
         )
         return 0
     return 2

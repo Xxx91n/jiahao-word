@@ -62,6 +62,7 @@ class Word:
     lang: str
     word: str
     env: str | None
+    issue: int | None
 
 
 @dataclass
@@ -151,12 +152,15 @@ def _read_words(
         else:
             word = word_value.strip()
 
+        issue_number = None
         if issue is None:
             problems.append(Problem(spot, "缺 issue 编号"))
-        elif _issue_number(issue) is None:
-            problems.append(
-                Problem(spot, f"issue 编号「{issue}」不对，得是正整数")
-            )
+        else:
+            issue_number = _issue_number(issue)
+            if issue_number is None:
+                problems.append(
+                    Problem(spot, f"issue 编号「{issue}」不对，得是正整数")
+                )
 
         env = None
         if env_value is not None:
@@ -168,7 +172,7 @@ def _read_words(
                 )
 
         if lang is not None and word is not None:
-            words.append(Word(lang=lang, word=word, env=env))
+            words.append(Word(lang=lang, word=word, env=env, issue=issue_number))
 
     return words, len(raw) > 0
 

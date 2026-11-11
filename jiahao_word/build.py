@@ -1,16 +1,26 @@
-"""把组数据生成成 README 里的对照表和按语言的检索索引。"""
+"""把组数据生成成 README 里的对照表、按语言的检索索引和整包查询数据。"""
 
 from __future__ import annotations
 
 import json
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
-from .check import JARGON, LANGUAGES, PLAIN, Group, normalize_word, scan_groups
+from .check import (
+    JARGON,
+    LANGUAGES,
+    PLAIN,
+    Group,
+    Word,
+    normalize_word,
+    scan_groups,
+)
 
 START_MARKER = "<!-- generated:start -->"
 END_MARKER = "<!-- generated:end -->"
+API_DATA_NAME = "data.json"
 TABLE_HEADER = (
     "| 黑话 | 大白话 | 标签 | 用在哪 |\n"
     "| --- | --- | --- | --- |"
@@ -58,16 +68,18 @@ def _group_sort_key(group: Group) -> tuple[int, str]:
     return _group_id_sort_key(group.id)
 
 
+def _word_order(word: Word, preferred_lang: str) -> tuple[bool, int, str]:
+    """查词结果怎么排：偏好的那门语言在前，再按语言顺序，最后按查重写法。"""
+    return (
+        word.lang != preferred_lang,
+        _language_rank(word.lang),
+        normalize_word(word.lang, word.word),
+    )
+
+
 def _plain_text(group: Group, jargon_lang: str) -> str:
     """同一种语言的大白话排前面，再排别的语言。"""
-    words = sorted(
-        group.plain,
-        key=lambda word: (
-            word.lang != jargon_lang,
-            _language_rank(word.lang),
-            normalize_word(word.lang, word.word),
-        ),
-    )
+    words = sorted(group.plain, key=lambda word: _word_order(word, jargon_lang))
     return "、".join(_format_word(word) for word in words)
 
 
@@ -83,6 +95,23 @@ def render_table(groups: list[Group]) -> str:
     return "\n".join(lines)
 
 
+@dataclass(frozen=True)
+class _Row:
+    """组里的一条词，带上是黑话还是大白话。"""
+
+    kind: str
+    word: Word
+
+
+def _words_by_kind(group: Group) -> list[_Row]:
+    """组里的黑话和大白话，平铺，每条带上自己是哪种。"""
+    return [
+        _Row(kind, word)
+        for kind, words in ((JARGON, group.jargon), (PLAIN, group.plain))
+        for word in words
+    ]
+
+
 def render_indexes(groups: list[Group]) -> dict[str, str]:
     """每种语言一份 JSON：查一个词，拿到它所在的组。
 
@@ -92,17 +121,16 @@ def render_indexes(groups: list[Group]) -> dict[str, str]:
         lang: {} for lang in LANGUAGES
     }
     for group in sorted(groups, key=_group_sort_key):
-        for kind, words in ((JARGON, group.jargon), (PLAIN, group.plain)):
-            for word in words:
-                key = normalize_word(word.lang, word.word)
-                buckets[word.lang].setdefault(key, []).append(
-                    {
-                        "group": group.id,
-                        "label": group.label,
-                        "kind": kind,
-                        "env": word.env,
-                    }
-                )
+        for row in _words_by_kind(group):
+            key = normalize_word(row.word.lang, row.word.word)
+            buckets[row.word.lang].setdefault(key, []).append(
+                {
+                    "group": group.id,
+                    "label": group.label,
+                    "kind": row.kind,
+                    "env": row.word.env,
+                }
+            )
 
     result: dict[str, str] = {}
     for lang in LANGUAGES:
@@ -119,6 +147,68 @@ def render_indexes(groups: list[Group]) -> dict[str, str]:
             json.dumps(entries, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
         )
     return result
+
+
+def _api_entry(word: Word, kind: str) -> dict[str, object]:
+    """整包数据里的一条词。issue 只给编号，网址让页面自己拼。"""
+    return {
+        "lang": word.lang,
+        "word": word.word,
+        "kind": kind,
+        "env": word.env,
+        "issue": word.issue,
+    }
+
+
+def _api_entries(group: Group) -> list[dict[str, object]]:
+    """组里的词表：平铺，按语言顺序，再按查重写法，最后按类型。
+
+    整包数据里没有「这次查的是哪门语言」，所以顺序是固定的；同一个组
+    从哪个键下拿出来都一模一样。要按查询语言排，是页面自己的事。
+    """
+    rows = _words_by_kind(group)
+    rows.sort(
+        key=lambda row: (
+            _language_rank(row.word.lang),
+            normalize_word(row.word.lang, row.word.word),
+            row.kind,
+        )
+    )
+    return [_api_entry(row.word, row.kind) for row in rows]
+
+
+def render_api_data(groups: list[Group]) -> str:
+    """整包查询数据：每个词 → 它落在哪些组，键在生成时就算好。
+
+    值永远是数组；组按编号数字排；一个词在同一组既是黑话又是大白话时，
+    两条都进同一张词表，这一组在这个键下只出现一次。
+    """
+    buckets: dict[str, dict[str, list[dict[str, object]]]] = {
+        lang: {} for lang in LANGUAGES
+    }
+    for group in sorted(groups, key=_group_sort_key):
+        entries = _api_entries(group)
+        group_data: dict[str, object] = {
+            "group": group.id,
+            "label": group.label,
+            "entries": entries,
+        }
+        for lang in LANGUAGES:
+            group_data[lang] = [item for item in entries if item["lang"] == lang]
+
+        keys: dict[str, set[str]] = {lang: set() for lang in LANGUAGES}
+        for item in entries:
+            keys[item["lang"]].add(normalize_word(item["lang"], item["word"]))
+        for lang in LANGUAGES:
+            for key in keys[lang]:
+                buckets[lang].setdefault(key, []).append(group_data)
+
+    for lang in LANGUAGES:
+        for candidates in buckets[lang].values():
+            candidates.sort(key=lambda item: _group_id_sort_key(item["group"]))
+
+    data = {"format": 1, "words": buckets}
+    return json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
 def _stage(path: Path, content: str) -> Path:
@@ -154,8 +244,13 @@ def replace_block(text: str, table: str) -> str:
     return text[:start] + "\n" + table + "\n" + text[end:]
 
 
-def generate(groups_dir: Path, readme_path: Path, index_dir: Path) -> tuple[int, int]:
-    """生成对照表和索引，返回（组数、索引份数）。数据有问题就不写文件。"""
+def generate(
+    groups_dir: Path,
+    readme_path: Path,
+    index_dir: Path,
+    api_dir: Path,
+) -> int:
+    """生成对照表、索引和整包查询数据，返回组数。数据有问题就不写文件。"""
     groups, problems, _ = scan_groups(groups_dir)
     if problems:
         raise BuildError(
@@ -172,6 +267,7 @@ def generate(groups_dir: Path, readme_path: Path, index_dir: Path) -> tuple[int,
     table = render_table(groups)
     new_text = replace_block(text, table)
     indexes = render_indexes(groups)
+    api_data = render_api_data(groups)
 
     staged: list[tuple[Path, Path]] = []
     try:
@@ -179,6 +275,9 @@ def generate(groups_dir: Path, readme_path: Path, index_dir: Path) -> tuple[int,
         for lang, content in indexes.items():
             target = index_dir / f"{lang}.json"
             staged.append((_stage(target, content), target))
+        api_dir.mkdir(parents=True, exist_ok=True)
+        api_target = api_dir / API_DATA_NAME
+        staged.append((_stage(api_target, api_data), api_target))
         staged.append((_stage(readme_path, new_text), readme_path))
         # 内容先全写进临时文件，再逐个换上去；写临时文件失败时已有文件不动。
         # 多个文件之间不是一次原子操作，换到一半失败要靠漂移检查发现。
@@ -189,4 +288,4 @@ def generate(groups_dir: Path, readme_path: Path, index_dir: Path) -> tuple[int,
             temp.unlink(missing_ok=True)
         raise BuildError(f"写文件失败：{error}") from error
 
-    return len(groups), len(indexes)
+    return len(groups)
