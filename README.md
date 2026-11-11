@@ -33,7 +33,7 @@ To add a word, open an issue first, then open a pull request.
 - You must write the plain-language explanation yourself—agents cannot write it for you.
 - See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, local check commands, and review standards.
 
-Whenever you change data in `groups/`, run `build` and commit the generated README table and `index/` files together.
+Whenever you change data in `groups/`, run `build` and commit the generated README table, the `index/` files, and `api/data.json` together.
 
 ## Comparison Table
 
