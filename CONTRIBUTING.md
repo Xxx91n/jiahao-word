@@ -31,7 +31,7 @@ python -m jiahao_word check-pr --body-file pr-body.md
 
 `check` 一次把所有数据问题列出来，改完再跑一次；`build` 会改 README 的生成块、`index/` 和 `api/data.json`；`check-pr` 从文件或标准输入读 PR 描述。
 
-PR 上 CI 跑四件事：pytest、对 `groups/` 跑 `check`、跑 `build` 后检查生成文件有没有漂移、对 PR 描述跑 `check-pr`。`main` 分支也会跑前三条。哪条红了就按提示改，改完把生成结果一起提交。
+PR 上 CI 跑四件事：pytest、对 `groups/` 跑 `check`、跑 `build` 后检查生成文件有没有漂移、对 PR 描述跑 `check-pr`。`main` 分支也会跑前三条，全过了还会试着发布站点（`api/` 加根首页）；Pages 没开就跳过，不报错。哪条红了就按提示改，改完把生成结果一起提交。
 
 ## 怎么审核
 
