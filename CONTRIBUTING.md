@@ -13,7 +13,7 @@
 PR 模板固定带 `## 人话说明` 段，段名和 `check-pr` 认的一字不差。
 
 - 这段同样要由人写，写清楚为什么改、改完有什么不同。留空或只留模板里的注释，`check-pr` 就会失败，CI 也会拦下来。
-- 改动了 `groups/` 数据时，跑 `build` 生成的 README 对照表和 `index/` 索引要一起提交，不要手改生成内容。
+- 改动了 `groups/` 数据时，跑 `build` 生成的 README 对照表、`index/` 索引和 `api/data.json` 要一起提交，不要手改生成内容。
 
 ## 数据长什么样
 
@@ -29,7 +29,7 @@ python -m jiahao_word build
 python -m jiahao_word check-pr --body-file pr-body.md
 ```
 
-`check` 一次把所有数据问题列出来，改完再跑一次；`build` 会改 README 的生成块和 `index/`；`check-pr` 从文件或标准输入读 PR 描述。
+`check` 一次把所有数据问题列出来，改完再跑一次；`build` 会改 README 的生成块、`index/` 和 `api/data.json`；`check-pr` 从文件或标准输入读 PR 描述。
 
 PR 上 CI 跑四件事：pytest、对 `groups/` 跑 `check`、跑 `build` 后检查生成文件有没有漂移、对 PR 描述跑 `check-pr`。`main` 分支也会跑前三条。哪条红了就按提示改，改完把生成结果一起提交。
 

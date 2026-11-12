@@ -33,7 +33,7 @@ LLM 写出来的话里，常冒出一眼看不懂的词。
 - 「人话说明」必须由你自己写，Agent 不能代写。
 - 完整流程、本地检查命令和审核标准都在 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-改了 `groups/` 里的数据，要把 `build` 生成的 README 对照表和 `index/` 一起提交。
+改了 `groups/` 里的数据，要把 `build` 生成的 README 对照表、`index/` 和 `api/data.json` 一起提交。
 
 ## 对照表
 
