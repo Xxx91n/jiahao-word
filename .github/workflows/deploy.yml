@@ -1,0 +1,143 @@
+name: 发布站点
+
+on:
+  workflow_run:
+    # 检查在 main 上跑完且全过了，才轮到发布；PR 上只跑检查，碰不到这里。
+    workflows: ["检查"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: 检查发布条件
+    # 只认本仓库 main 的 push 跑出来的检查；fork 提的 PR 头分支也可能叫 main，
+    # 拿那种提交去发布等于让人替我们写站点。
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: read
+    outputs:
+      allowed: ${{ steps.probe.outputs.allowed }}
+    steps:
+      - id: probe
+        name: 看能不能发
+        env:
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # 两件事都得成立：Pages 已经开、这份提交还是 main 最新。
+          # 只在「确实没开」和「已经被顶掉」这两种情况下跳过；
+          # 权限不对、接口抽风都算真失败，别装成跳过。
+          if pages_err="$(gh api "repos/$REPO/pages" 2>&1 >/dev/null)"; then
+            :
+          else
+            case "$pages_err" in
+              *404*)
+                echo "Pages 还没开，这次不发布。开 Pages 另算。" >> "$GITHUB_STEP_SUMMARY"
+                echo "allowed=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+              *)
+                echo "查 Pages 状态失败：$pages_err" >&2
+                exit 1
+                ;;
+            esac
+          fi
+
+          # 手动重跑一份旧的成功检查时，结论还是 success，不拦就会把旧内容推回去。
+          latest="$(gh api "repos/$REPO/commits/main" --jq .sha)"
+          if [ "$latest" != "$HEAD_SHA" ]; then
+            echo "这份提交 $HEAD_SHA 已经被 main 上的 $latest 顶掉，不往回发。" >> "$GITHUB_STEP_SUMMARY"
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 发布源不是 GitHub Actions 的话，Pages 会直接发整个分支，上面的清单就白列了。
+          source="$(gh api "repos/$REPO/pages" --jq '.build_type // "unknown"')"
+          if [ "$source" != "workflow" ]; then
+            echo "Pages 的发布源是「$source」，不是 GitHub Actions，这套清单管不住，先停。" >&2
+            echo "去仓库设置里把 Pages 的来源改成 GitHub Actions 再来。" >&2
+            exit 1
+          fi
+
+          echo "allowed=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: 打包站点
+    needs: guard
+    if: needs.guard.outputs.allowed == 'true'
+    # 并发组挂在干活的 job 上，不挂整条工作流：排在同组里还没开跑的会被新来的顶掉，
+    # 挂在工作流上时，被守卫跳过的那种空跑也会占坑，把 main 的发布挤掉。
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - id: checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - id: pack
+        name: 只收 api/ 和根首页
+        run: |
+          # api/ 里有符号链接的话，拷贝和打包会顺过去，把仓库里别的东西（比如 tests/）也带上网。
+          if find api -type l | grep -q .; then
+            echo "api/ 里有符号链接，不知道它会指到哪，不敢打包：" >&2
+            find api -type l >&2
+            exit 1
+          fi
+          rm -rf _site
+          mkdir -p _site/api
+          cp -R api/. _site/api/
+          cp index.html _site/index.html
+          test -f _site/api/index.html
+          test -f _site/api/data.json
+          test -f _site/index.html
+          echo "上线清单："
+          find _site -type f | sort
+      - id: still-latest
+        name: 打包完再看一眼有没有被顶掉
+        env:
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # 打包这会儿 main 可能又往前走了一步，那样这份就已经旧了，别发。
+          latest="$(gh api "repos/$REPO/commits/main" --jq .sha)"
+          if [ "$latest" != "$HEAD_SHA" ]; then
+            echo "打包期间 main 已经到 $latest，这份 $HEAD_SHA 不发。" >&2
+            exit 1
+          fi
+          echo "确认还是 main 最新，继续发。"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: 上线
+    needs: build
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
