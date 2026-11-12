@@ -14,15 +14,17 @@ We only collect AI jargon and translationese. Regular dictionary words are out o
 
 ## How to look up words
 
-Use the indexes in this repo:
-- Chinese: `index/zh.json`
-- English: `index/en.json`
+The lookup page lives at `api/index.html`. It isn't online yet, so to view it, run `python -m http.server --bind 127.0.0.1` from the repo root and open `http://localhost:8000/api/`. Type a word and press the search button to get its plain-language meaning, how to say the same thing in the other language, and every group it lands in.
 
-1. Open `index/zh.json` or `index/en.json` in your editor and search for the word. Each word is followed by a bracketed list of every group it belongs to, including the group ID, a label, and `env`. On the command line, run `grep -i -A 20 'word' index/en.json` to show matching lines and nearby candidates (bump up 20 if there are lots of matches). Words in the English index are converted to lowercase, so make sure your query is lowercase too.
-2. Once you find it, check which group it maps to, like `g0001`.
-3. Open `groups/g0001.yaml`. Inside, you will find the jargon term along with plain-language alternatives in both Chinese and English.
+Each group shows its ID and label; each entry shows `env` (where the word gets used) and the issue it came in through. Label and `env` may be empty; when they are set, they help you pick the right group. One word can land in several groups, so pick the one that fits.
 
-> A single word can belong to multiple groups. Each result includes a group ID, a short label (a quick summary of the group), and `env` (where the word gets used); the label and `env` may be empty, but they help you pick the right group when present. If a language section in a group file is empty, that language simply does not have a matching phrase yet—it is not missing data.
+An empty language section means that language has no phrase for the meaning yet, not that data is missing. If the word is in the other language, the page tells you it's missing here but present there, and links you to a lookup in that language. Only when neither language has it does it say the word isn't in the repo yet and offer a link to open a new-word issue.
+
+### For scripts
+
+Everything the page looks up lives in [api/data.json](api/data.json), one whole file; `format` is the shape version. Keys come pre-normalized: leading and trailing spaces trimmed, and English keys case-folded (so `Leverage` and `leverage` land on the same key, and `STRASSE` matches `straße`). For example `words.en.leverage` is the array of groups for that word. Each group has `group`, `label`, a flat `entries` list (`lang`, `word`, `kind`, `env`, `issue`), plus per-language `zh` and `en` slices that the page renders from.
+
+The per-language indexes are still there: `index/zh.json`, `index/en.json`. From a terminal, `grep -i -A 20 'word' index/en.json` searches English and `grep -i -A 20 '词' index/zh.json` searches Chinese; each prints the matching lines and nearby candidates (bump up 20 when there are lots of matches). Raw data sits in `groups/`, one YAML file per group, named by its ID, like `groups/g0001.yaml`.
 
 ## How to contribute
 
